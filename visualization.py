@@ -8,9 +8,67 @@ from datetime import datetime, timedelta
 
 from dividend_data import get_dividend_history
 
-
+def plot_yield_comparison(dividend_kings, portfolio_title):
+    """
+    Create a bar chart comparing yields
+    
+    Args:
+        dividend_kings (pd.DataFrame): DataFrame with portfolio data
+        portfolio_title (str): Title of the portfolio
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    # Create yield comparison figure
+    fig = px.bar(
+        dividend_kings, 
+        x='Company', 
+        y='Current Yield',
+        title=f'{portfolio_title} Yield Comparison',
+        labels={'Current Yield': 'Yield (%)', 'Company': 'Company'}
+    )
+    
     # Format x-axis as percentage
     fig.update_xaxes(ticksuffix='%')
+    
+    return fig
+
+def plot_monthly_income(monthly_income, portfolio_title):
+    """
+    Create a bar chart showing monthly income distribution
+    
+    Args:
+        monthly_income (dict): Dictionary of monthly income values
+        portfolio_title (str): Title of the portfolio
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    # Convert monthly income to DataFrame
+    monthly_data = pd.DataFrame({
+        'Month': list(monthly_income.keys()),
+        'Income': list(monthly_income.values())
+    })
+    
+    # Create figure
+    fig = px.bar(
+        monthly_data, 
+        x='Month', 
+        y='Income',
+        title=f'{portfolio_title} Monthly Income Distribution',
+        labels={'Income': 'Monthly Income ($)', 'Month': 'Month'}
+    )
+    
+    # Update layout
+    fig.update_layout(
+        xaxis_title='Month',
+        yaxis_title='Monthly Income ($)',
+        template='plotly_white',
+        height=500
+    )
+    
+    # Format y-axis as currency
+    fig.update_yaxes(tickprefix='$')
     
     return fig
 
@@ -98,63 +156,138 @@ def plot_dividend_growth(ticker):
     )
     
     # Format primary y-axis as currency
-    fig.update_yaxes(tickprefix=', secondary_y=False)
+    fig.update_yaxes(tickprefix='$', secondary_y=False)
     
     return fig
 
-def plot_investment_vs_income(dividend_kings):
+def plot_yield_comparison(dividend_kings, portfolio_title):
     """
-    Create a scatter plot comparing investment amount vs income
+    Create a bar chart comparing yields
     
     Args:
         dividend_kings (pd.DataFrame): DataFrame with portfolio data
+        portfolio_title (str): Title of the portfolio
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    # Create yield comparison figure
+    fig = px.bar(
+        dividend_kings, 
+        x='Company', 
+        y='Current Yield',
+        title=f'{portfolio_title} Yield Comparison',
+        labels={'Current Yield': 'Yield (%)', 'Company': 'Company'}
+    )
+    
+    # Format y-axis as percentage
+    fig.update_yaxes(ticksuffix='%')
+    
+    return fig
+
+def plot_monthly_distribution(monthly_income, portfolio_title):
+    """
+    Create a bar chart showing monthly income distribution for ETFs
+    
+    Args:
+        monthly_income (dict): Dictionary of monthly income values
+        portfolio_title (str): Title of the portfolio
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    # Convert monthly income to DataFrame
+    monthly_data = pd.DataFrame({
+        'Month': list(monthly_income.keys()),
+        'Income': list(monthly_income.values())
+    })
+    
+    # Create figure
+    fig = px.bar(
+        monthly_data, 
+        x='Month', 
+        y='Income',
+        title=f'{portfolio_title} Monthly Income Distribution',
+        labels={'Income': 'Monthly Distribution ($)', 'Month': 'Month'}
+    )
+    
+    # Update layout
+    fig.update_layout(
+        xaxis_title='Month',
+        yaxis_title='Monthly Distribution ($)',
+        template='plotly_white',
+        height=500
+    )
+    
+    # Format y-axis as currency
+    fig.update_yaxes(tickprefix='$')
+    
+    return fig
+
+def plot_etf_comparison(etf_portfolio, metric='yield'):
+    """
+    Create a comparison chart for ETFs based on selected metric
+    
+    Args:
+        etf_portfolio (pd.DataFrame): DataFrame with ETF portfolio data
+        metric (str): Metric to compare (yield, expense_ratio, or income)
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    # Select the appropriate column based on metric
+    if metric == 'yield':
+        y_column = 'Current Yield'
+        y_title = 'Yield (%)'
+    elif metric == 'expense_ratio':
+        y_column = 'Expense Ratio'
+        y_title = 'Expense Ratio (%)'
+    else:  # income
+        y_column = 'Annual Income'
+        y_title = 'Annual Income ($)'
+    
+    # Create figure
+    fig = px.bar(
+        etf_portfolio, 
+        x='Name', 
+        y=y_column,
+        title=f'ETF Comparison: {y_title}',
+        labels={y_column: y_title, 'Name': 'ETF Name'}
+    )
+    
+    # Update layout
+    fig.update_layout(
+        xaxis_title='ETF Name',
+        yaxis_title=y_title,
+        template='plotly_white',
+        height=500
+    )
+    
+    # Format y-axis based on metric
+    if metric == 'income':
+        fig.update_yaxes(tickprefix='$')
+    else:
+        fig.update_yaxes(ticksuffix='%')
+    
+    return fig
+
+def plot_etf_allocation(etf_portfolio):
+    """
+    Create a pie chart showing ETF allocation
+    
+    Args:
+        etf_portfolio (pd.DataFrame): DataFrame with ETF portfolio data
     
     Returns:
         plotly.graph_objects.Figure: Plotly figure
     """
     # Create figure
-    fig = px.scatter(
-        dividend_kings,
-        x='Investment',
-        y='Annual Income',
-        size='Current Yield',
-        color='Current Yield',
-        hover_name='Company',
-        text='Ticker',
-        color_continuous_scale='Viridis',
-        title='Investment vs. Income Comparison',
-        size_max=30
-    )
-    
-    # Add reference lines for average yield
-    avg_yield = dividend_kings['Current Yield'].mean()
-    x_range = [dividend_kings['Investment'].min(), dividend_kings['Investment'].max()]
-    y_range = [x * avg_yield / 100 for x in x_range]
-    
-    fig.add_trace(go.Scatter(
-        x=x_range,
-        y=y_range,
-        mode='lines',
-        line=dict(dash='dash', color='red', width=2),
-        name=f'Average Yield ({avg_yield:.2f}%)'
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        xaxis_title='Investment Amount ($)',
-        yaxis_title='Annual Income ($)',
-        template='plotly_white',
-        height=600
-    )
-    
-    # Format axes as currency
-    fig.update_xaxes(tickprefix=')
-    fig.update_yaxes(tickprefix=')
-    
-    # Improve text display
-    fig.update_traces(
-        textposition='top center',
-        textfont=dict(size=10, color='black', family='Arial')
+    fig = px.pie(
+        etf_portfolio,
+        values='Investment',
+        names='Name',
+        title='ETF Investment Allocation',
+        hole=0.4,
     )
     
     return fig
