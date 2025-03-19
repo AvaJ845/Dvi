@@ -20,6 +20,27 @@ def calculate_portfolio_metrics(dividend_kings):
     
     return total_investment, total_annual_income, portfolio_yield
 
+def calculate_etf_portfolio_metrics(etf_portfolio):
+    """
+    Calculate portfolio metrics for ETF portfolio
+    
+    Args:
+        etf_portfolio (pd.DataFrame): DataFrame with ETF portfolio data
+    
+    Returns:
+        tuple: (total_investment, total_annual_income, portfolio_yield, weighted_expense_ratio)
+    """
+    total_investment = etf_portfolio['Investment'].sum()
+    total_annual_income = etf_portfolio['Annual Income'].sum()
+    
+    # Calculate portfolio yield
+    portfolio_yield = (total_annual_income / total_investment * 100) if total_investment > 0 else 0
+    
+    # Calculate weighted expense ratio
+    weighted_expense_ratio = (etf_portfolio['Expense Ratio'] * etf_portfolio['Investment'] / total_investment).sum() if total_investment > 0 else 0
+    
+    return total_investment, total_annual_income, portfolio_yield, weighted_expense_ratio
+
 def calculate_monthly_income(dividend_kings):
     """
     Calculate monthly income distribution
@@ -51,79 +72,85 @@ def calculate_monthly_income(dividend_kings):
     
     return monthly_income
 
-def calculate_dividend_growth_stats(dividend_history):
+def calculate_etf_monthly_income(etf_portfolio):
     """
-    Calculate dividend growth statistics
+    Calculate monthly income distribution for ETF portfolio
     
     Args:
-        dividend_history (pd.DataFrame): DataFrame with dividend history
+        etf_portfolio (pd.DataFrame): DataFrame with ETF portfolio data
     
     Returns:
-        dict: Growth statistics
+        dict: Monthly income values
     """
-    if dividend_history.empty:
-        return {
-            '1yr_growth': 0,
-            '3yr_growth': 0,
-            '5yr_growth': 0,
-            '10yr_growth': 0,
-            'cagr': 0
-        }
+    # Create a dictionary to store monthly income
+    monthly_income = {month: 0 for month in calendar.month_name[1:]}
     
-    # Group by year
-    dividend_history['Year'] = pd.to_datetime(dividend_history['Date']).dt.year
-    annual_dividends = dividend_history.groupby('Year')['Dividend'].sum().reset_index()
+    # Calculate income for each ETF
+    for _, row in etf_portfolio.iterrows():
+        payout_frequency = row.get('Payout Frequency', 'Quarterly')
+        monthly_income_value = row['Monthly Income']
+        
+        if payout_frequency == 'Monthly':
+            # Distribute evenly across all months
+            for month in monthly_income.keys():
+                monthly_income[month] += monthly_income_value / 12
+        else:
+            # For quarterly payers, distribute across 3 months
+            payout_month = row.get('Payout Month', 'January')
+            month_map = {month: i+1 for i, month in enumerate(calendar.month_name) if month}
+            payout_month_idx = month_map[payout_month]
+            
+            # Distribute quarterly income across 3 months
+            for i in range(3):
+                month_idx = ((payout_month_idx - 1 + i) % 12) + 1
+                month_name = calendar.month_name[month_idx]
+                monthly_income[month_name] += monthly_income_value / 3
     
-    # Calculate growth rates
-    years = len(annual_dividends)
+    return monthly_income
+
+def calculate_income_stability_score(portfolio_data):
+    """
+    Calculate income stability score
     
-    if years < 2:
-        return {
-            '1yr_growth': 0,
-            '3yr_growth': 0,
-            '5yr_growth': 0,
-            '10yr_growth': 0,
-            'cagr': 0
-        }
+    Args:
+        portfolio_data (pd.DataFrame): DataFrame with portfolio data
     
-    latest = annual_dividends.iloc[-1]['Dividend']
+    Returns:
+        float: Income stability score (0-100)
+    """
+    # Factors to consider for stability score
+    # 1. Yield consistency
+    # 2. Payout frequency
+    # 3. Expense ratio (for ETFs)
     
-    # 1-year growth
-    one_yr_growth = 0
-    if years >= 2:
-        previous = annual_dividends.iloc[-2]['Dividend']
-        one_yr_growth = (latest / previous - 1) * 100 if previous > 0 else 0
+    # Yield stability
+    yield_variation = portfolio_data['Current Yield'].std() / portfolio_data['Current Yield'].mean() * 100 if len(portfolio_data) > 1 else 0
     
-    # 3-year growth
-    three_yr_growth = 0
-    if years >= 4:
-        previous = annual_dividends.iloc[-4]['Dividend']
-        three_yr_growth = (latest / previous - 1) * 100 if previous > 0 else 0
+    # Payout frequency bonus
+    monthly_payers = portfolio_data[portfolio_data.get('Payout Frequency', 'Quarterly') == 'Monthly']
+    monthly_payer_percentage = len(monthly_payers) / len(portfolio_data) * 100 if len(portfolio_data) > 0 else 0
     
-    # 5-year growth
-    five_yr_growth = 0
-    if years >= 6:
-        previous = annual_dividends.iloc[-6]['Dividend']
-        five_yr_growth = (latest / previous - 1) * 100 if previous > 0 else 0
+    # Expense ratio penalty (for ETFs)
+    if 'Expense Ratio' in portfolio_data.columns:
+        expense_ratio_penalty = portfolio_data['Expense Ratio'].mean() if len(portfolio_data) > 0 else 0
+    else:
+        expense_ratio_penalty = 0
     
-    # 10-year growth
-    ten_yr_growth = 0
-    if years >= 11:
-        previous = annual_dividends.iloc[-11]['Dividend']
-        ten_yr_growth = (latest / previous - 1) * 100 if previous > 0 else 0
+    # Calculate stability score
+    # Base score starts at 100
+    base_score = 100
     
-    # CAGR
-    cagr = 0
-    if years >= 2:
-        first = annual_dividends.iloc[0]['Dividend']
-        n_years = annual_dividends.iloc[-1]['Year'] - annual_dividends.iloc[0]['Year']
-        if n_years > 0 and first > 0:
-            cagr = ((latest / first) ** (1 / n_years) - 1) * 100
+    # Reduce score based on yield variation
+    variation_penalty = min(yield_variation * 0.5, 20)  # Max 20 point penalty
     
-    return {
-        '1yr_growth': one_yr_growth,
-        '3yr_growth': three_yr_growth,
-        '5yr_growth': five_yr_growth,
-        '10yr_growth': ten_yr_growth,
-        'cagr': cagr
-    }
+    # Bonus for monthly payers
+    monthly_payer_bonus = min(monthly_payer_percentage, 10)
+    
+    # Penalty for high expense ratios
+    expense_ratio_deduction = min(expense_ratio_penalty * 5, 10)  # Max 10 point penalty
+    
+    # Final stability score
+    stability_score = base_score - variation_penalty + monthly_payer_bonus - expense_ratio_deduction
+    
+    # Ensure score is between 0 and 100
+    return max(0, min(stability_score, 100))
