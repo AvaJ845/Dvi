@@ -1,258 +1,153 @@
-import pandas as pd
 import streamlit as st
-import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from etf_data import get_etf_distribution_history
 
-@st.cache_data(ttl=3600)  # Cache data for 1 hour
-def load_etf_data():
+def display_etf_detail(etf_row, etf_data=None):
     """
-    Load predefined ETF data including CLM and SDVI
-    """
-    # Create dataframe with ETFs
-    data = {
-        'Name': [
-            'Cornerstone Strategic Value Fund', 
-            'Speed Ventures Income Fund',
-            'SPDR S&P Dividend ETF',
-            'Vanguard High Dividend Yield ETF',
-            'iShares Select Dividend ETF',
-            'Schwab US Dividend Equity ETF',
-            'ProShares S&P 500 Dividend Aristocrats ETF',
-            'Global X SuperDividend ETF'
-        ],
-        'Ticker': [
-            'CLM', 
-            'SDVI',
-            'SDY',
-            'VYM',
-            'DVY',
-            'SCHD',
-            'NOBL',
-            'SDIV'
-        ],
-        'Category': [
-            'Closed-End Fund', 
-            'Closed-End Fund',
-            'ETF',
-            'ETF',
-            'ETF',
-            'ETF',
-            'ETF',
-            'ETF'
-        ],
-        'Focus': [
-            'U.S. Equity',
-            'Mixed Income',
-            'Dividend',
-            'Dividend',
-            'Dividend',
-            'Dividend',
-            'Dividend Aristocrats',
-            'Global Dividend'
-        ],
-        'Payout Frequency': [
-            'Monthly',
-            'Monthly',
-            'Quarterly',
-            'Quarterly',
-            'Quarterly',
-            'Quarterly',
-            'Quarterly',
-            'Monthly'
-        ],
-        'Description': [
-            'A closed-end fund that seeks capital appreciation with current income as a secondary objective. Often provides a high distribution rate.',
-            'Income-focused fund that seeks to deliver consistent monthly income through various income-generating assets.',
-            'Tracks the S&P High Yield Dividend Aristocrats Index, which focuses on companies that have consistently increased their dividends for at least 20 consecutive years.',
-            'Invests in stocks with above-average dividend yields, providing exposure to dividend-paying companies across various sectors.',
-            'Tracks an index of relatively high-dividend-paying US companies, focusing on dividend consistency and sustainability.',
-            'Focuses on quality companies with high dividend yields, strong fundamentals, and consistent dividend growth.',
-            'Invests in companies from the S&P 500 that have increased their dividends for at least 25 consecutive years.',
-            'Seeks to track an equal-weighted index of 100 high-dividend-yielding companies from around the world.'
-        ]
-    }
-    
-    return pd.DataFrame(data)
-
-@st.cache_data(ttl=3600)  # Cache data for 1 hour
-def fetch_etf_data(tickers):
-    """
-    Fetch ETF data using yfinance
+    Display detailed information about a specific ETF
     
     Args:
-        tickers (list): List of ETF tickers
-    
-    Returns:
-        dict: Dictionary with ETF data
+        etf_row (pd.Series): Row of ETF data from portfolio DataFrame
+        etf_data (dict, optional): Additional ETF data from API
     """
-    etf_data = {}
+    # Create columns for basic information
+    col1, col2 = st.columns(2)
     
+    with col1:
+        st.markdown("### ETF Basics")
+        st.metric("ETF Name", etf_row['Name'])
+        st.metric("Ticker", etf_row['Ticker'])
+        
+        # Category if available
+        if 'Category' in etf_row:
+            st.metric("Category", etf_row['Category'])
+        
+        # Focus if available
+        if 'Focus' in etf_row:
+            st.metric("Investment Focus", etf_row['Focus'])
+    
+    with col2:
+        st.markdown("### Current Investment Details")
+        st.metric("Investment", f"${etf_row['Investment']:,.2f}")
+        st.metric("Shares", f"{etf_row['Shares']:,.2f}")
+        st.metric("Current Price", f"${etf_row['Current Price']:,.2f}")
+    
+    # Income Information
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.markdown("### Distribution Information")
+        st.metric("Current Yield", f"{etf_row['Current Yield']:.2f}%")
+        st.metric("Annual Income", f"${etf_row['Annual Income']:,.2f}")
+        
+        # Payout frequency if available
+        if 'Payout Frequency' in etf_row:
+            st.metric("Payout Frequency", etf_row['Payout Frequency'])
+    
+    with col4:
+        st.markdown("### Fees & Expenses")
+        # Expense ratio if available
+        if 'Expense Ratio' in etf_row:
+            expense_impact = etf_row['Investment'] * etf_row['Expense Ratio'] / 100
+            st.metric("Expense Ratio", f"{etf_row['Expense Ratio']:.2f}%")
+            st.metric("Annual Fee Impact", f"${expense_impact:.2f}")
+    
+    # ETF Description if available
+    if 'Description' in etf_row and etf_row['Description']:
+        st.markdown("### ETF Description")
+        st.write(etf_row['Description'])
+    
+    # Fetch distribution history
     try:
-        # Fetch data for all tickers at once
-        yf_data = yf.download(tickers, period="1d")
+        # Get distribution history
+        distribution_history = get_etf_distribution_history(etf_row['Ticker'])
         
-        # Fetch additional info for each ticker
-        for ticker in tickers:
-            try:
-                etf = yf.Ticker(ticker)
-                info = etf.info
-                
-                # Get latest price
-                price = yf_data['Close'][ticker].iloc[-1] if not yf_data.empty else 0
-                
-                # Get yield data
-                try:
-                    # For ETFs, we look at trailingAnnualDividendYield
-                    annual_dividend = info.get('trailingAnnualDividendRate', 0)
-                    dividend_yield = info.get('trailingAnnualDividendYield', 0) * 100
-                    
-                    # If data is not available, try calculating from history
-                    if annual_dividend == 0 or dividend_yield == 0:
-                        hist = etf.history(period="1y")
-                        if not hist.empty and 'Dividends' in hist.columns:
-                            dividends = hist[hist['Dividends'] > 0]['Dividends']
-                            annual_dividend = dividends.sum() if not dividends.empty else 0
-                            dividend_yield = (annual_dividend / price * 100) if price > 0 else 0
-                except:
-                    annual_dividend = 0
-                    dividend_yield = 0
-                
-                # Get expense ratio (management fee)
-                expense_ratio = info.get('annualReportExpenseRatio', 0) * 100
-                if expense_ratio == 0:
-                    expense_ratio = info.get('feesExpenseRatio', 0) * 100
-                
-                # Get AUM (Net Assets)
-                aum = info.get('totalAssets', 0)
-                
-                # Special handling for CLM and SDVI, which might have higher yields
-                if ticker in ['CLM', 'SDVI'] and dividend_yield < 5:
-                    # CLM typically has a very high yield
-                    if ticker == 'CLM':
-                        dividend_yield = 17.5  # Estimate if not available
-                        annual_dividend = price * dividend_yield / 100
-                    # SDVI is also high-yield
-                    elif ticker == 'SDVI':
-                        dividend_yield = 9.8   # Estimate if not available
-                        annual_dividend = price * dividend_yield / 100
-                
-                # Store the data
-                etf_data[ticker] = {
-                    'price': price,
-                    'dividend': annual_dividend,
-                    'yield': dividend_yield,
-                    'expense_ratio': expense_ratio,
-                    'aum': aum,
-                    'name': info.get('longName', ticker),
-                    'category': info.get('category', 'N/A'),
-                    'beta': info.get('beta', 0),
-                    'ytd_return': info.get('ytdReturn', 0) * 100 if info.get('ytdReturn') else 0,
-                    'three_year_return': info.get('threeYearAverageReturn', 0) * 100 if info.get('threeYearAverageReturn') else 0
-                }
-            except Exception as e:
-                st.warning(f"Error fetching detailed data for {ticker}: {e}")
-                
-                # Add placeholder data, with special handling for CLM and SDVI
-                default_yield = 17.5 if ticker == 'CLM' else (9.8 if ticker == 'SDVI' else 3.0)
-                default_price = yf_data['Close'][ticker].iloc[-1] if not yf_data.empty else 20
-                default_dividend = default_price * default_yield / 100
-                
-                etf_data[ticker] = {
-                    'price': default_price,
-                    'dividend': default_dividend,
-                    'yield': default_yield,
-                    'expense_ratio': 1.0,
-                    'aum': 500000000,
-                    'name': ticker,
-                    'category': 'ETF/CEF',
-                    'beta': 1.0,
-                    'ytd_return': 5.0,
-                    'three_year_return': 15.0
-                }
-    except Exception as e:
-        st.error(f"Error fetching ETF data: {e}")
-        
-        # Create placeholder data if API fails
-        for ticker in tickers:
-            # Special handling for CLM and SDVI
-            default_yield = 17.5 if ticker == 'CLM' else (9.8 if ticker == 'SDVI' else 3.0)
-            default_price = 20.0 if ticker == 'CLM' else (15.0 if ticker == 'SDVI' else 50.0)
-            default_dividend = default_price * default_yield / 100
+        # Display distribution history if available
+        if not distribution_history.empty:
+            st.markdown("### Distribution History")
             
-            etf_data[ticker] = {
-                'price': default_price,
-                'dividend': default_dividend,
-                'yield': default_yield,
-                'expense_ratio': 1.0,
-                'aum': 500000000,
-                'name': ticker,
-                'category': 'ETF/CEF',
-                'beta': 1.0,
-                'ytd_return': 5.0,
-                'three_year_return': 15.0
-            }
+            # Plot distribution history
+            fig = px.line(
+                distribution_history,
+                x='Date',
+                y='Distribution',
+                title=f"{etf_row['Name']} ({etf_row['Ticker']}) Distribution History",
+                markers=True
+            )
+            
+            fig.update_layout(
+                xaxis_title='Date',
+                yaxis_title='Distribution ($)',
+                template='plotly_white',
+                height=400
+            )
+            
+            fig.update_yaxes(tickprefix='$')
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Calculate distribution statistics
+            avg_distribution = distribution_history['Distribution'].mean()
+            max_distribution = distribution_history['Distribution'].max()
+            min_distribution = distribution_history['Distribution'].min()
+            
+            # Show statistics
+            stat_col1, stat_col2, stat_col3 = st.columns(3)
+            
+            with stat_col1:
+                st.metric("Average Distribution", f"${avg_distribution:.4f}")
+            
+            with stat_col2:
+                st.metric("Maximum Distribution", f"${max_distribution:.4f}")
+            
+            with stat_col3:
+                st.metric("Minimum Distribution", f"${min_distribution:.4f}")
     
-    return etf_data
-
-@st.cache_data(ttl=86400)  # Cache data for 24 hours
-def get_etf_distribution_history(ticker, years=3):
-    """
-    Get distribution history for an ETF
-    
-    Args:
-        ticker (str): ETF ticker
-        years (int): Number of years to look back
-    
-    Returns:
-        pd.DataFrame: Distribution history
-    """
-    try:
-        etf = yf.Ticker(ticker)
-        history = etf.history(period=f"{years}y")
-        
-        # Extract distributions
-        distributions = history[history['Dividends'] > 0][['Dividends']]
-        
-        if distributions.empty:
-            # Return empty dataframe with proper columns
-            return pd.DataFrame(columns=['Date', 'Distribution'])
-        
-        # Reset index to get date as column
-        distributions = distributions.reset_index()
-        
-        # Convert to proper format
-        distributions['Date'] = distributions['Date'].dt.date
-        distributions = distributions.rename(columns={'Dividends': 'Distribution'})
-        
-        return distributions
     except Exception as e:
-        st.error(f"Error fetching distribution history for {ticker}: {e}")
+        st.warning(f"Could not retrieve detailed distribution history: {e}")
+    
+    # Additional market data if available
+    if etf_data:
+        st.markdown("### Current Market Data")
         
-        # Generate sample data
-        import numpy as np
-        from datetime import datetime, timedelta
+        # Display additional ETF data columns
+        market_columns = ['price', 'dividend', 'yield', 'expense_ratio', 'aum', 'beta', 'ytd_return', 'three_year_return']
+        market_labels = {
+            'price': 'Current Price',
+            'dividend': 'Annual Distribution',
+            'yield': 'Distribution Yield',
+            'expense_ratio': 'Expense Ratio',
+            'aum': 'Assets Under Management',
+            'beta': 'Beta',
+            'ytd_return': 'YTD Return',
+            'three_year_return': '3-Year Return'
+        }
         
-        # Create sample dates and distributions
-        # For CLM and SDVI, make monthly distributions
-        if ticker in ['CLM', 'SDVI', 'SDIV']:
-            dates = [(datetime.now() - timedelta(days=30*i)).date() for i in range(36)]  # 3 years of monthly data
-            base_distribution = 0.15 if ticker == 'CLM' else (0.10 if ticker == 'SDVI' else 0.08)
-        else:
-            # Quarterly for others
-            dates = [(datetime.now() - timedelta(days=90*i)).date() for i in range(12)]  # 3 years of quarterly data
-            base_distribution = 0.40
+        # Create multiple rows of columns for market data
+        market_data_rows = [market_columns[i:i+3] for i in range(0, len(market_columns), 3)]
         
-        # Add some variation
-        distributions = []
-        for i, date in enumerate(dates):
-            # Add slight variation to distribution amounts
-            variation = np.random.normal(0, 0.02)
-            distribution = max(0.01, base_distribution * (1 + variation))
-            distributions.append(distribution)
-        
-        # Create dataframe
-        df = pd.DataFrame({
-            'Date': dates,
-            'Distribution': distributions
-        })
-        
-        return df
+        for row_keys in market_data_rows:
+            # Filter to only keys that exist in etf_data
+            row_keys = [key for key in row_keys if key in etf_data]
+            
+            if row_keys:
+                columns = st.columns(len(row_keys))
+                
+                for i, key in enumerate(row_keys):
+                    with columns[i]:
+                        # Format the value appropriately
+                        if key in ['price', 'dividend', 'aum']:
+                            if key == 'aum' and etf_data[key] > 1000000:
+                                value = f"${etf_data[key]/1000000:,.2f}M"
+                            else:
+                                value = f"${etf_data[key]:,.2f}"
+                        elif key in ['yield', 'expense_ratio', 'ytd_return', 'three_year_return']:
+                            value = f"{etf_data[key]:.2f}%"
+                        elif key == 'beta':
+                            value = f"{etf_data[key]:.3f}"
+                        else:
+                            value = str(etf_data[key])
+                        
+                        st.metric(market_labels.get(key, key.replace('_', ' ').title()), value)
