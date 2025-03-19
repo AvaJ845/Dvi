@@ -204,7 +204,7 @@ def calculate_dividend_growth_stats(dividend_history):
     
     Args:
         dividend_history (pd.DataFrame): DataFrame with dividend history data
-                                        Expected to have 'date' and 'dividend' columns
+                                        Expected to have 'Date' and 'Dividend' columns
     
     Returns:
         dict: Dictionary containing growth statistics
@@ -218,6 +218,13 @@ def calculate_dividend_growth_stats(dividend_history):
             '10yr_growth': 0,
             'cagr': 0
         }
+    
+    # Ensure column names are consistent (convert to lowercase if needed)
+    if 'Date' in dividend_history.columns and 'date' not in dividend_history.columns:
+        dividend_history['date'] = dividend_history['Date']
+    
+    if 'Dividend' in dividend_history.columns and 'dividend' not in dividend_history.columns:
+        dividend_history['dividend'] = dividend_history['Dividend']
     
     # Sort by date
     dividend_history = dividend_history.sort_values('date')
