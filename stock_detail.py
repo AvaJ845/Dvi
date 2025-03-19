@@ -3,8 +3,22 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# Ensure this import matches exactly
-from portfolio_analysis import calculate_dividend_growth_stats
+# Try to import from portfolio_analysis, but provide a fallback implementation
+try:
+    from portfolio_analysis import calculate_dividend_growth_stats
+except ImportError:
+    # Fallback implementation if import fails
+    def calculate_dividend_growth_stats(dividend_history):
+        """
+        Placeholder function to prevent import errors
+        """
+        return {
+            '1yr_growth': 0,
+            '3yr_growth': 0,
+            '5yr_growth': 0,
+            '10yr_growth': 0,
+            'cagr': 0
+        }
 
 def display_stock_detail(stock_row, stock_data=None):
     """
@@ -117,16 +131,3 @@ def display_stock_detail(stock_row, stock_data=None):
                     value = str(stock_data[key])
                 
                 st.metric(market_labels.get(key, key.replace('_', ' ').title()), value)
-
-# Ensure this function exists to prevent import errors
-def calculate_dividend_growth_stats(dividend_history):
-    """
-    Placeholder function to prevent import errors
-    """
-    return {
-        '1yr_growth': 0,
-        '3yr_growth': 0,
-        '5yr_growth': 0,
-        '10yr_growth': 0,
-        'cagr': 0
-    }
