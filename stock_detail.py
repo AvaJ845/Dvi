@@ -3,15 +3,20 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# Try to import from portfolio_analysis, but provide a fallback implementation
-try:
-    from portfolio_analysis import calculate_dividend_growth_stats
-except ImportError:
-    # Fallback implementation if import fails
-    def calculate_dividend_growth_stats(dividend_history):
-        """
-        Placeholder function to prevent import errors
-        """
+# Define the function directly in this file to avoid import issues
+def calculate_dividend_growth_stats(dividend_history):
+    """
+    Calculate dividend growth statistics from dividend history
+    
+    Args:
+        dividend_history (pd.DataFrame): DataFrame with dividend history data
+                                        Expected to have 'date' and 'dividend' columns
+    
+    Returns:
+        dict: Dictionary containing growth statistics
+    """
+    # If dividend history is empty, return zeros
+    if dividend_history is None or len(dividend_history) == 0:
         return {
             '1yr_growth': 0,
             '3yr_growth': 0,
@@ -19,6 +24,63 @@ except ImportError:
             '10yr_growth': 0,
             'cagr': 0
         }
+    
+    # Sort by date
+    dividend_history = dividend_history.sort_values('date')
+    
+    # Get the most recent dividend
+    latest_dividend = dividend_history['dividend'].iloc[-1]
+    
+    # Calculate growth rates for different periods
+    growth_stats = {}
+    
+    # 1-year growth
+    try:
+        one_year_ago = dividend_history['date'].iloc[-1] - pd.DateOffset(years=1)
+        one_year_dividend = dividend_history[dividend_history['date'] <= one_year_ago]['dividend'].iloc[-1]
+        growth_stats['1yr_growth'] = (latest_dividend / one_year_dividend - 1) * 100
+    except (IndexError, KeyError):
+        growth_stats['1yr_growth'] = 0
+    
+    # 3-year growth
+    try:
+        three_years_ago = dividend_history['date'].iloc[-1] - pd.DateOffset(years=3)
+        three_year_dividend = dividend_history[dividend_history['date'] <= three_years_ago]['dividend'].iloc[-1]
+        growth_stats['3yr_growth'] = (latest_dividend / three_year_dividend - 1) * 100
+    except (IndexError, KeyError):
+        growth_stats['3yr_growth'] = 0
+    
+    # 5-year growth
+    try:
+        five_years_ago = dividend_history['date'].iloc[-1] - pd.DateOffset(years=5)
+        five_year_dividend = dividend_history[dividend_history['date'] <= five_years_ago]['dividend'].iloc[-1]
+        growth_stats['5yr_growth'] = (latest_dividend / five_year_dividend - 1) * 100
+    except (IndexError, KeyError):
+        growth_stats['5yr_growth'] = 0
+    
+    # 10-year growth
+    try:
+        ten_years_ago = dividend_history['date'].iloc[-1] - pd.DateOffset(years=10)
+        ten_year_dividend = dividend_history[dividend_history['date'] <= ten_years_ago]['dividend'].iloc[-1]
+        growth_stats['10yr_growth'] = (latest_dividend / ten_year_dividend - 1) * 100
+    except (IndexError, KeyError):
+        growth_stats['10yr_growth'] = 0
+    
+    # Calculate CAGR (Compound Annual Growth Rate)
+    try:
+        first_date = dividend_history['date'].iloc[0]
+        last_date = dividend_history['date'].iloc[-1]
+        years = (last_date - first_date).days / 365.25
+        first_dividend = dividend_history['dividend'].iloc[0]
+        
+        if years > 0 and first_dividend > 0:
+            growth_stats['cagr'] = ((latest_dividend / first_dividend) ** (1 / years) - 1) * 100
+        else:
+            growth_stats['cagr'] = 0
+    except (IndexError, KeyError, ZeroDivisionError):
+        growth_stats['cagr'] = 0
+    
+    return growth_stats
 
 def display_stock_detail(stock_row, stock_data=None):
     """
