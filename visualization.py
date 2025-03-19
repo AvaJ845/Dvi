@@ -25,11 +25,13 @@ def plot_yield_comparison(dividend_kings, portfolio_title):
         x='Company', 
         y='Current Yield',
         title=f'{portfolio_title} Yield Comparison',
-        labels={'Current Yield': 'Yield (%)', 'Company': 'Company'}
+        labels={'Current Yield': 'Yield (%)', 'Company': 'Company'},
+        color='Current Yield',
+        color_continuous_scale='Blues'
     )
     
-    # Format x-axis as percentage
-    fig.update_xaxes(ticksuffix='%')
+    # Format y-axis as percentage
+    fig.update_yaxes(ticksuffix='%')
     
     return fig
 
@@ -56,7 +58,9 @@ def plot_monthly_income(monthly_income, portfolio_title):
         x='Month', 
         y='Income',
         title=f'{portfolio_title} Monthly Income Distribution',
-        labels={'Income': 'Monthly Income ($)', 'Month': 'Month'}
+        labels={'Income': 'Monthly Income ($)', 'Month': 'Month'},
+        color='Income',
+        color_continuous_scale='Blues'
     )
     
     # Update layout
@@ -69,6 +73,10 @@ def plot_monthly_income(monthly_income, portfolio_title):
     
     # Format y-axis as currency
     fig.update_yaxes(tickprefix='$')
+    
+    # Custom month order
+    month_order = list(calendar.month_name)[1:]
+    fig.update_xaxes(categoryorder='array', categoryarray=month_order)
     
     return fig
 
@@ -160,31 +168,6 @@ def plot_dividend_growth(ticker):
     
     return fig
 
-def plot_yield_comparison(dividend_kings, portfolio_title):
-    """
-    Create a bar chart comparing yields
-    
-    Args:
-        dividend_kings (pd.DataFrame): DataFrame with portfolio data
-        portfolio_title (str): Title of the portfolio
-    
-    Returns:
-        plotly.graph_objects.Figure: Plotly figure
-    """
-    # Create yield comparison figure
-    fig = px.bar(
-        dividend_kings, 
-        x='Company', 
-        y='Current Yield',
-        title=f'{portfolio_title} Yield Comparison',
-        labels={'Current Yield': 'Yield (%)', 'Company': 'Company'}
-    )
-    
-    # Format y-axis as percentage
-    fig.update_yaxes(ticksuffix='%')
-    
-    return fig
-
 def plot_monthly_distribution(monthly_income, portfolio_title):
     """
     Create a bar chart showing monthly income distribution for ETFs
@@ -208,7 +191,9 @@ def plot_monthly_distribution(monthly_income, portfolio_title):
         x='Month', 
         y='Income',
         title=f'{portfolio_title} Monthly Income Distribution',
-        labels={'Income': 'Monthly Distribution ($)', 'Month': 'Month'}
+        labels={'Income': 'Monthly Distribution ($)', 'Month': 'Month'},
+        color='Income',
+        color_continuous_scale='Blues'
     )
     
     # Update layout
@@ -221,6 +206,10 @@ def plot_monthly_distribution(monthly_income, portfolio_title):
     
     # Format y-axis as currency
     fig.update_yaxes(tickprefix='$')
+    
+    # Custom month order
+    month_order = list(calendar.month_name)[1:]
+    fig.update_xaxes(categoryorder='array', categoryarray=month_order)
     
     return fig
 
@@ -239,12 +228,15 @@ def plot_etf_comparison(etf_portfolio, metric='yield'):
     if metric == 'yield':
         y_column = 'Current Yield'
         y_title = 'Yield (%)'
+        color_scale = 'Blues'
     elif metric == 'expense_ratio':
         y_column = 'Expense Ratio'
         y_title = 'Expense Ratio (%)'
+        color_scale = 'Reds_r'  # Reversed red scale (lower is better)
     else:  # income
         y_column = 'Annual Income'
         y_title = 'Annual Income ($)'
+        color_scale = 'Greens'
     
     # Create figure
     fig = px.bar(
@@ -252,7 +244,9 @@ def plot_etf_comparison(etf_portfolio, metric='yield'):
         x='Name', 
         y=y_column,
         title=f'ETF Comparison: {y_title}',
-        labels={y_column: y_title, 'Name': 'ETF Name'}
+        labels={y_column: y_title, 'Name': 'ETF Name'},
+        color=y_column,
+        color_continuous_scale=color_scale
     )
     
     # Update layout
@@ -289,5 +283,57 @@ def plot_etf_allocation(etf_portfolio):
         title='ETF Investment Allocation',
         hole=0.4,
     )
+    
+    return fig
+
+def plot_income_forecast(forecast_df, view_type="monthly", growth_scenario=""):
+    """
+    Create a plot for projected income
+    
+    Args:
+        forecast_df (pd.DataFrame): DataFrame with forecasted income
+        view_type (str): Type of view - "monthly" or "yearly"
+        growth_scenario (str): Growth scenario description
+    
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure
+    """
+    if view_type == "monthly":
+        # Line chart showing projected income by month for each year
+        fig = px.line(
+            forecast_df,
+            x='Month',
+            y='Projected Income',
+            color='Year',
+            title=f"Projected Monthly Income ({growth_scenario})",
+            markers=True
+        )
+        
+        # Custom month order
+        month_order = list(calendar.month_name)[1:]
+        fig.update_xaxes(categoryorder='array', categoryarray=month_order)
+    
+    else:  # Yearly Comparison
+        # Calculate yearly totals
+        yearly_totals = forecast_df.groupby('Year')['Projected Income'].sum().reset_index()
+        yearly_totals['Projected Annual Income'] = yearly_totals['Projected Income']
+        
+        fig = px.bar(
+            yearly_totals,
+            x='Year',
+            y='Projected Annual Income',
+            title=f"Projected Annual Income ({growth_scenario})",
+            color='Projected Annual Income',
+            color_continuous_scale='Blues'
+        )
+    
+    fig.update_layout(
+        xaxis_title='Month' if view_type == "monthly" else 'Year',
+        yaxis_title='Income ($)',
+        template='plotly_white',
+        height=500
+    )
+    
+    fig.update_yaxes(tickprefix='$')
     
     return fig

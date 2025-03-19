@@ -49,6 +49,70 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def load_all_stocks_data():
+    """
+    Load and combine data from all portfolios for the All Stocks view
+    
+    Returns:
+        pd.DataFrame: Combined data from all portfolios
+    """
+    # Load data from all three portfolio types
+    kings_data = load_dividend_kings_data()
+    aristocrats_data = load_dividend_aristocrats_data()
+    etf_data = load_etf_data()
+    
+    # Add portfolio source column
+    kings_data['Portfolio'] = "Dividend Kings"
+    aristocrats_data['Portfolio'] = "Dividend Aristocrats" 
+    etf_data['Portfolio'] = "ETF Portfolio"
+    
+    # Standardize column names for consistency
+    if 'Name' in etf_data.columns and 'Company' not in etf_data.columns:
+        etf_data = etf_data.rename(columns={'Name': 'Company'})
+    
+    # Prepare combined dataframe with common columns
+    kings_columns = kings_data.columns.tolist()
+    aristocrats_columns = aristocrats_data.columns.tolist()
+    etf_columns = etf_data.columns.tolist()
+    
+    # Identify key columns that should be in the final result
+    key_columns = ['Ticker', 'Portfolio']
+    name_column = 'Company' if 'Company' in kings_columns else 'Name'
+    key_columns.append(name_column)
+    
+    # Add payout information if available
+    if 'Payout Month' in kings_columns:
+        key_columns.append('Payout Month')
+    elif 'Payout Frequency' in etf_columns:
+        etf_data['Payout Month'] = etf_data['Payout Frequency']
+        key_columns.append('Payout Month')
+    
+    # Add growth information if available
+    if 'Years of Growth' in kings_columns:
+        key_columns.append('Years of Growth')
+    
+    # Add yield information if available
+    if 'Current Yield' in aristocrats_columns:
+        key_columns.append('Current Yield')
+    
+    # Add description if available
+    if 'Description' in kings_columns:
+        key_columns.append('Description')
+    
+    # Filter data to only include common columns
+    all_kings = kings_data[[col for col in kings_data.columns if col in key_columns or col == name_column]]
+    all_aristocrats = aristocrats_data[[col for col in aristocrats_data.columns if col in key_columns or col == name_column]]
+    
+    if 'Payout Month' not in etf_data.columns and 'Payout Frequency' in etf_data.columns:
+        etf_data['Payout Month'] = etf_data['Payout Frequency']
+    
+    all_etfs = etf_data[[col for col in etf_data.columns if col in key_columns or col == name_column]]
+    
+    # Combine all data
+    all_stocks = pd.concat([all_kings, all_aristocrats, all_etfs], ignore_index=True)
+    
+    return all_stocks
+
 def main():
     # App header
     st.markdown("<h1 class='main-header'>Dividend Monthly Income Tracker</h1>", unsafe_allow_html=True)
@@ -63,11 +127,12 @@ def main():
     )
     
     # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Monthly Income Dashboard", 
         "Portfolio Analysis", 
         "Investment Details",
-        "Growth & Projections"
+        "Growth & Projections",
+        "All Stocks"
     ])
     
     # Load appropriate data based on selection
@@ -87,46 +152,90 @@ def main():
     # Default investment amount
     default_investment = 10000  # $10,000 per stock by default
     
-    # Create a dictionary to store investment amounts
-    investment_amounts = {}
+    # Add input method selection
+    input_method = st.sidebar.radio(
+        "Input Method",
+        ["Investment Amount", "Share Count"]
+    )
     
-    # Add investment inputs to sidebar
-    st.sidebar.subheader("Investment Amounts")
+    # Create a dictionary to store input values
+    input_values = {}
     
-    # Option to set equal investment for all stocks
-    equal_investment = st.sidebar.checkbox("Equal investment for all stocks", value=True)
+    # Add inputs to sidebar based on selected method
+    st.sidebar.subheader("Portfolio Allocation")
     
-    if equal_investment:
-        default_amount = st.sidebar.number_input(
-            "Investment amount per stock ($)",
-            min_value=1000,
-            max_value=1000000,
-            value=default_investment,
-            step=1000
-        )
+    if input_method == "Investment Amount":
+        # Option to set equal investment for all stocks
+        equal_investment = st.sidebar.checkbox("Equal investment for all stocks", value=True)
         
-        for ticker in dividend_data['Ticker'].unique():
-            investment_amounts[ticker] = default_amount
-    else:
-        # Create individual sliders for each stock
-        for _, row in dividend_data.iterrows():
-            ticker = row['Ticker']
-            company = row['Company'] if 'Company' in row else row.get('Name', ticker)
-            investment_amounts[ticker] = st.sidebar.number_input(
-                f"{company} ({ticker}) investment ($)",
-                min_value=0,
+        if equal_investment:
+            default_amount = st.sidebar.number_input(
+                "Investment amount per stock ($)",
+                min_value=1000,
                 max_value=1000000,
                 value=default_investment,
                 step=1000
             )
+            
+            for ticker in dividend_data['Ticker'].unique():
+                input_values[ticker] = default_amount
+        else:
+            # Create individual inputs for each stock
+            for _, row in dividend_data.iterrows():
+                ticker = row['Ticker']
+                company = row['Company'] if 'Company' in row else row.get('Name', ticker)
+                input_values[ticker] = st.sidebar.number_input(
+                    f"{company} ({ticker}) investment ($)",
+                    min_value=0,
+                    max_value=1000000,
+                    value=default_investment,
+                    step=1000
+                )
+    else:  # Share Count
+        # Option to set equal shares for all stocks
+        equal_shares = st.sidebar.checkbox("Equal shares for all stocks", value=True)
+        
+        if equal_shares:
+            default_shares = st.sidebar.number_input(
+                "Number of shares per stock",
+                min_value=1,
+                max_value=10000,
+                value=100,
+                step=10
+            )
+            
+            for ticker in dividend_data['Ticker'].unique():
+                input_values[ticker] = default_shares
+        else:
+            # Create individual inputs for each stock
+            for _, row in dividend_data.iterrows():
+                ticker = row['Ticker']
+                company = row['Company'] if 'Company' in row else row.get('Name', ticker)
+                input_values[ticker] = st.sidebar.number_input(
+                    f"{company} ({ticker}) shares",
+                    min_value=0,
+                    max_value=10000,
+                    value=100,
+                    step=10
+                )
     
-    # Add investment amounts to the dataframe
-    investment_data = []
-    for ticker, amount in investment_amounts.items():
-        investment_data.append({"Ticker": ticker, "Investment": amount})
-    
-    investment_df = pd.DataFrame(investment_data)
-    portfolio_df = dividend_data.merge(investment_df, on="Ticker")
+    # Add input data to the dataframe
+    if input_method == "Investment Amount":
+        # Use investment amounts to calculate shares
+        investment_data = []
+        for ticker, amount in input_values.items():
+            investment_data.append({"Ticker": ticker, "Investment": amount})
+        
+        investment_df = pd.DataFrame(investment_data)
+        portfolio_df = dividend_data.merge(investment_df, on="Ticker")
+    else:  # Share Count
+        # Use share counts to calculate investment amount
+        share_data = []
+        for ticker, shares in input_values.items():
+            share_data.append({"Ticker": ticker, "Shares": shares})
+        
+        share_df = pd.DataFrame(share_data)
+        portfolio_df = dividend_data.merge(share_df, on="Ticker")
     
     # Fetch latest stock/ETF data and calculate current metrics
     try:
@@ -161,10 +270,17 @@ def main():
                         stock_data[ticker]['dividend'] / current_price * 100
                     )
                 
-                # Calculate shares
-                portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Shares'] = (
-                    portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Investment'] / current_price
-                ).round(2)
+                # Calculate shares or investment based on input method
+                if input_method == "Investment Amount":
+                    # Calculate shares based on investment amount
+                    portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Shares'] = (
+                        portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Investment'] / current_price
+                    ).round(2)
+                else:  # Share Count
+                    # Calculate investment based on share count
+                    portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Investment'] = (
+                        portfolio_df.loc[portfolio_df['Ticker'] == ticker, 'Shares'] * current_price
+                    ).round(2)
                 
                 # Calculate annual dividend/distribution income
                 if portfolio_type in ["Dividend Aristocrats", "ETF Portfolio"] and 'Current Yield' in portfolio_df.columns:
@@ -214,7 +330,12 @@ def main():
         if portfolio_type == "ETF Portfolio" and 'Expense Ratio' not in portfolio_df.columns:
             portfolio_df['Expense Ratio'] = np.random.uniform(0.3, 1.2, len(portfolio_df))
         
-        portfolio_df['Shares'] = (portfolio_df['Investment'] / portfolio_df['Current Price']).round(2)
+        # Calculate shares or investment based on input method
+        if input_method == "Investment Amount" and 'Shares' not in portfolio_df.columns:
+            portfolio_df['Shares'] = (portfolio_df['Investment'] / portfolio_df['Current Price']).round(2)
+        elif input_method == "Share Count" and 'Investment' not in portfolio_df.columns:
+            portfolio_df['Investment'] = (portfolio_df['Shares'] * portfolio_df['Current Price']).round(2)
+            
         portfolio_df['Annual Income'] = (
             portfolio_df['Shares'] * portfolio_df['Current Price'] * portfolio_df['Current Yield'] / 100
         ).round(2)
@@ -490,19 +611,240 @@ def main():
             st.dataframe(detailed_df, use_container_width=True)
             
         else:
-            st.markdown(f"<h2 class='sub-header'>{portfolio_title} Dividend Growth History</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h2 class='sub-header'>{portfolio_title} Dividend Growth & Income Forecast</h2>", unsafe_allow_html=True)
             
-            # Select stock for dividend growth history
-            selected_growth_stock = st.selectbox(
-                f"Select a {portfolio_title.rstrip('s')} for Growth History",
-                options=portfolio_df['Company'].tolist(),
-                key="growth_select"
+            # Add tabs within the Growth & Projections tab for different forecast views
+            forecast_tab1, forecast_tab2 = st.tabs(["Monthly Income Forecast", "Dividend Growth History"])
+            
+            with forecast_tab1:
+                st.markdown("<h3>Monthly Income Forecast</h3>", unsafe_allow_html=True)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Allow user to select forecast horizon
+                    forecast_years = st.slider(
+                        "Forecast Horizon (Years)",
+                        min_value=1,
+                        max_value=10,
+                        value=5
+                    )
+                
+                with col2:
+                    # Allow user to select growth scenario
+                    growth_scenario = st.radio(
+                        "Dividend Growth Scenario",
+                        ["Conservative (3%)", "Moderate (5%)", "Aggressive (7%)"],
+                        horizontal=True
+                    )
+                
+                # Map scenario to annual growth rate
+                growth_rates = {
+                    "Conservative (3%)": 0.03,
+                    "Moderate (5%)": 0.05,
+                    "Aggressive (7%)": 0.07
+                }
+                
+                annual_growth_rate = growth_rates[growth_scenario]
+                
+                # Calculate current monthly income
+                monthly_income = calculate_monthly_income(portfolio_df)
+                
+                # Create forecast for each month over the forecast period
+                forecast_data = []
+                
+                for year in range(1, forecast_years + 1):
+                    year_growth_factor = (1 + annual_growth_rate) ** (year - 1)
+                    
+                    for month, income in monthly_income.items():
+                        # Apply growth factor to monthly income
+                        projected_income = income * year_growth_factor
+                        
+                        forecast_data.append({
+                            'Year': year,
+                            'Month': month,
+                            'Projected Income': projected_income
+                        })
+                
+                # Create dataframe
+                forecast_df = pd.DataFrame(forecast_data)
+                
+                # Create visualization
+                view_option = st.radio(
+                    "Visualization View",
+                    ["Monthly View", "Yearly Comparison"],
+                    horizontal=True
+                )
+                
+                if view_option == "Monthly View":
+                    # Line chart showing projected income by month for each year
+                    fig = px.line(
+                        forecast_df,
+                        x='Month',
+                        y='Projected Income',
+                        color='Year',
+                        title=f"Projected Monthly Income ({growth_scenario})",
+                        markers=True
+                    )
+                    
+                    # Custom month order
+                    month_order = list(calendar.month_name)[1:]
+                    fig.update_xaxes(categoryorder='array', categoryarray=month_order)
+                    
+                else:  # Yearly Comparison
+                    # Calculate yearly totals
+                    yearly_totals = forecast_df.groupby('Year')['Projected Income'].sum().reset_index()
+                    yearly_totals['Projected Annual Income'] = yearly_totals['Projected Income']
+                    
+                    fig = px.bar(
+                        yearly_totals,
+                        x='Year',
+                        y='Projected Annual Income',
+                        title=f"Projected Annual Income Over {forecast_years} Years ({growth_scenario})",
+                        color='Projected Annual Income',
+                        color_continuous_scale='blues'
+                    )
+                
+                fig.update_layout(
+                    xaxis_title='Month' if view_option == "Monthly View" else 'Year',
+                    yaxis_title='Income ($)',
+                    template='plotly_white',
+                    height=500
+                )
+                
+                fig.update_yaxes(tickprefix='$')
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Calculate and display summary statistics
+                total_current_annual = sum(monthly_income.values()) * 4  # Quarterly payments
+                total_final_annual = forecast_df[forecast_df['Year'] == forecast_years]['Projected Income'].sum()
+                
+                # Create columns for metrics
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
+                
+                with metric_col1:
+                    st.metric(
+                        "Current Annual Income", 
+                        f"${total_current_annual:,.2f}"
+                    )
+                
+                with metric_col2:
+                    st.metric(
+                        f"Projected Annual Income (Year {forecast_years})", 
+                        f"${total_final_annual:,.2f}",
+                        delta=f"{((total_final_annual / total_current_annual) - 1) * 100:.2f}%"
+                    )
+                
+                with metric_col3:
+                    monthly_avg_current = total_current_annual / 12
+                    monthly_avg_projected = total_final_annual / 12
+                    
+                    st.metric(
+                        f"Average Monthly Income (Year {forecast_years})", 
+                        f"${monthly_avg_projected:,.2f}",
+                        delta=f"${monthly_avg_projected - monthly_avg_current:,.2f}"
+                    )
+                
+                # Add detailed forecast table
+                with st.expander("Detailed Monthly Income Forecast"):
+                    # Calculate average monthly income for each year
+                    yearly_avg = forecast_df.groupby('Year')['Projected Income'].mean().reset_index()
+                    yearly_avg['Average Monthly Income'] = yearly_avg['Projected Income'].round(2)
+                    yearly_avg = yearly_avg[['Year', 'Average Monthly Income']]
+                    
+                    # Calculate total annual income for each year
+                    yearly_sum = forecast_df.groupby('Year')['Projected Income'].sum().reset_index()
+                    yearly_sum['Total Annual Income'] = yearly_sum['Projected Income'].round(2)
+                    yearly_sum = yearly_sum[['Year', 'Total Annual Income']]
+                    
+                    # Merge the two
+                    yearly_stats = pd.merge(yearly_avg, yearly_sum, on='Year')
+                    
+                    # Format as currency
+                    yearly_stats['Average Monthly Income'] = yearly_stats['Average Monthly Income'].apply(lambda x: f"${x:,.2f}")
+                    yearly_stats['Total Annual Income'] = yearly_stats['Total Annual Income'].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(yearly_stats, use_container_width=True)
+                    
+                    # Show monthly breakdown for selected year
+                    selected_year = st.selectbox("Select Year for Monthly Breakdown", options=range(1, forecast_years + 1))
+                    
+                    monthly_breakdown = forecast_df[forecast_df['Year'] == selected_year][['Month', 'Projected Income']]
+                    monthly_breakdown['Projected Income'] = monthly_breakdown['Projected Income'].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(monthly_breakdown, use_container_width=True)
+            
+            with forecast_tab2:
+                # Keep existing dividend growth history visualization
+                # Select stock for dividend growth history
+                selected_growth_stock = st.selectbox(
+                    f"Select a {portfolio_title.rstrip('s')} for Growth History",
+                    options=portfolio_df['Company'].tolist(),
+                    key="growth_select"
+                )
+                
+                # Display dividend growth chart
+                stock_row = portfolio_df[portfolio_df['Company'] == selected_growth_stock].iloc[0]
+                growth_fig = plot_dividend_growth(stock_row['Ticker'])
+                st.plotly_chart(growth_fig, use_container_width=True)
+    
+    # Tab 5: All Stocks
+    with tab5:
+        st.markdown("<h2 class='sub-header'>All Available Stocks</h2>", unsafe_allow_html=True)
+        
+        # Load and display all stocks
+        all_stocks = load_all_stocks_data()
+        
+        # Add filtering options
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            portfolio_filter = st.multiselect(
+                "Filter by Portfolio Type",
+                options=["Dividend Kings", "Dividend Aristocrats", "ETF Portfolio"],
+                default=["Dividend Kings", "Dividend Aristocrats", "ETF Portfolio"]
             )
+        
+        with col2:
+            # Add search functionality
+            search_term = st.text_input("Search by Company or Ticker")
+        
+        # Apply filters
+        filtered_stocks = all_stocks[all_stocks['Portfolio'].isin(portfolio_filter)]
+        
+        if search_term:
+            filtered_stocks = filtered_stocks[
+                filtered_stocks['Company'].str.contains(search_term, case=False) | 
+                filtered_stocks['Ticker'].str.contains(search_term, case=False)
+            ]
+        
+        # Sort options
+        sort_by = st.selectbox(
+            "Sort by",
+            options=["Company", "Ticker", "Portfolio"] + 
+                    (["Years of Growth"] if "Years of Growth" in all_stocks.columns else []) +
+                    (["Current Yield"] if "Current Yield" in all_stocks.columns else [])
+        )
+        
+        # Sort the data
+        sorted_stocks = filtered_stocks.sort_values(by=sort_by)
+        
+        # Display the data
+        st.dataframe(sorted_stocks, use_container_width=True)
+        
+        # Add export functionality
+        if st.button("Export All Stocks to CSV"):
+            # Convert dataframe to CSV
+            csv = sorted_stocks.to_csv(index=False)
             
-            # Display dividend growth chart
-            stock_row = portfolio_df[portfolio_df['Company'] == selected_growth_stock].iloc[0]
-            growth_fig = plot_dividend_growth(stock_row['Ticker'])
-            st.plotly_chart(growth_fig, use_container_width=True)
+            # Create download button
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name="all_dividend_stocks.csv",
+                mime="text/csv"
+            )
 
 if __name__ == "__main__":
     main()

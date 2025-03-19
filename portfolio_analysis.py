@@ -88,23 +88,27 @@ def calculate_etf_monthly_income(etf_portfolio):
     # Calculate income for each ETF
     for _, row in etf_portfolio.iterrows():
         payout_frequency = row.get('Payout Frequency', 'Quarterly')
-        monthly_income_value = row['Monthly Income']
+        annual_income = row['Annual Income']
         
         if payout_frequency == 'Monthly':
             # Distribute evenly across all months
+            monthly_income_value = annual_income / 12
+            
             for month in monthly_income.keys():
-                monthly_income[month] += monthly_income_value / 12
+                monthly_income[month] += monthly_income_value
         else:
-            # For quarterly payers, distribute across 3 months
+            # For quarterly payers, distribute across quarters
             payout_month = row.get('Payout Month', 'January')
             month_map = {month: i+1 for i, month in enumerate(calendar.month_name) if month}
             payout_month_idx = month_map[payout_month]
             
-            # Distribute quarterly income across 3 months
-            for i in range(3):
-                month_idx = ((payout_month_idx - 1 + i) % 12) + 1
+            # Distribute quarterly income
+            quarterly_income = annual_income / 4
+            
+            for i in range(4):
+                month_idx = ((payout_month_idx - 1 + i * 3) % 12) + 1
                 month_name = calendar.month_name[month_idx]
-                monthly_income[month_name] += monthly_income_value / 3
+                monthly_income[month_name] += quarterly_income
     
     return monthly_income
 
@@ -154,6 +158,45 @@ def calculate_income_stability_score(portfolio_data):
     
     # Ensure score is between 0 and 100
     return max(0, min(stability_score, 100))
+
+def forecast_monthly_income(portfolio_df, years=5, annual_growth_rate=0.05):
+    """
+    Forecast monthly income for a given number of years
+    
+    Args:
+        portfolio_df (pd.DataFrame): DataFrame with portfolio data
+        years (int): Number of years to forecast
+        annual_growth_rate (float): Annual growth rate for dividends
+    
+    Returns:
+        pd.DataFrame: DataFrame with forecasted monthly income
+    """
+    # Calculate current monthly income
+    if 'Payout Frequency' in portfolio_df.columns:
+        monthly_income = calculate_etf_monthly_income(portfolio_df)
+    else:
+        monthly_income = calculate_monthly_income(portfolio_df)
+    
+    # Create forecast for each month over the forecast period
+    forecast_data = []
+    
+    for year in range(1, years + 1):
+        year_growth_factor = (1 + annual_growth_rate) ** (year - 1)
+        
+        for month, income in monthly_income.items():
+            # Apply growth factor to monthly income
+            projected_income = income * year_growth_factor
+            
+            forecast_data.append({
+                'Year': year,
+                'Month': month,
+                'Projected Income': projected_income
+            })
+    
+    # Create dataframe
+    forecast_df = pd.DataFrame(forecast_data)
+    
+    return forecast_df
 
 def calculate_dividend_growth_stats(dividend_history):
     """
