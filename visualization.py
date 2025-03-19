@@ -116,55 +116,26 @@ def plot_dividend_growth(ticker):
     annual_dividends['Previous'] = annual_dividends['Dividend'].shift(1)
     annual_dividends['Growth'] = (annual_dividends['Dividend'] / annual_dividends['Previous'] - 1) * 100
     
-    # Create figure
-    fig = go.Figure()
-    
-    # Add annual dividend bars
-    fig.add_trace(go.Bar(
-        x=annual_dividends['Year'],
-        y=annual_dividends['Dividend'],
-        marker_color='#4682B4',
-        name='Annual Dividend'
-    ))
-    
-    # Add growth rate line
-    fig.add_trace(go.Scatter(
-        x=annual_dividends['Year'],
-        y=annual_dividends['Growth'],
-        mode='lines+markers',
-        line=dict(color='#FF4500', width=2),
-        marker=dict(size=8),
-        name='Growth Rate (%)',
-        yaxis='y2'
-    ))
-    
-    # Update layout with secondary y-axis
-    fig.update_layout(
-        title=f'{ticker} Dividend Growth History',
-        xaxis_title='Year',
-        yaxis_title='Annual Dividend ($)',
-        yaxis2=dict(
-            title='Growth Rate (%)',
-            titlefont=dict(color='#FF4500'),
-            tickfont=dict(color='#FF4500'),
-            anchor='x',
-            overlaying='y',
-            side='right',
-            ticksuffix='%'
-        ),
-        template='plotly_white',
-        height=500,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+    # Create a simpler figure that doesn't require a secondary y-axis
+    fig = px.bar(
+        annual_dividends,
+        x='Year',
+        y='Dividend',
+        title=f'{ticker} Annual Dividend History',
+        labels={'Dividend': 'Annual Dividend ($)', 'Year': 'Year'},
+        color_discrete_sequence=['#4682B4']
     )
     
-    # Format primary y-axis as currency
-    fig.update_yaxes(tickprefix='$', secondary_y=False)
+    # Update layout
+    fig.update_layout(
+        xaxis_title='Year',
+        yaxis_title='Annual Dividend ($)',
+        template='plotly_white',
+        height=500
+    )
+    
+    # Format y-axis as currency
+    fig.update_yaxes(tickprefix='$')
     
     return fig
 
